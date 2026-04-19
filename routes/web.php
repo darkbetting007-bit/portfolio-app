@@ -11,13 +11,17 @@ use App\Models\About;
 use App\Models\Project;
 use App\Models\Skill;
 
-// Frontend Routes
+/*
+|--------------------------------------------------------------------------
+| Public Frontend Routes
+|--------------------------------------------------------------------------
+*/
+
 Route::get('/', function () {
-    $about = App\Models\About::first();
-    $featuredProjects = App\Models\Project::where('featured', true)->latest()->take(3)->get();
-    $projects = App\Models\Project::latest()->paginate(6);
-    // Ubah: jangan groupBy dulu, atau gunakan all()
-    $skills = App\Models\Skill::all(); // <- perbaikan utama
+    $about = About::first();
+    $featuredProjects = Project::where('featured', true)->latest()->take(3)->get();
+    $projects = Project::latest()->paginate(6);
+    $skills = Skill::all(); // Untuk grid 3 kolom tanpa grouping
     return view('frontend.home', compact('about', 'featuredProjects', 'projects', 'skills'));
 })->name('home');
 
@@ -28,7 +32,22 @@ Route::get('/project/{project:slug}', function (Project $project) {
 
 Route::post('/contact', [FrontendContactController::class, 'store'])->name('contact.store');
 
-// Breeze Auth Routes
+/*
+|--------------------------------------------------------------------------
+| Setup Route (untuk migrasi & storage link di Railway)
+|--------------------------------------------------------------------------
+*/
+Route::get('/setup', function () {
+    \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+    \Illuminate\Support\Facades\Artisan::call('storage:link');
+    return 'Setup completed! Migrations run and storage linked.';
+});
+
+/*
+|--------------------------------------------------------------------------
+| Breeze Authentication Routes
+|--------------------------------------------------------------------------
+*/
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -39,17 +58,28 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Admin Routes
+/*
+|--------------------------------------------------------------------------
+| Admin Panel Routes (Protected by auth)
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+    // Dashboard Admin
     Route::get('/dashboard', function () {
         return view('admin.dashboard');
     })->name('dashboard');
 
+    // Projects CRUD
     Route::resource('projects', ProjectController::class);
+
+    // Skills CRUD
     Route::resource('skills', SkillController::class);
+
+    // About (single record, hanya edit)
     Route::get('about', [AboutController::class, 'edit'])->name('about.edit');
     Route::put('about', [AboutController::class, 'update'])->name('about.update');
 
+    // Contact Messages (hanya index & show)
     Route::get('contacts', [AdminContactController::class, 'index'])->name('contacts.index');
     Route::get('contacts/{contact}', [AdminContactController::class, 'show'])->name('contacts.show');
     Route::patch('contacts/{contact}/read', [AdminContactController::class, 'markRead'])->name('contacts.read');
