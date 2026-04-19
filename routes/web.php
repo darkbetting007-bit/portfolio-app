@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ContactController as AdminContactController;
 use App\Http\Controllers\Frontend\ContactController as FrontendContactController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use App\Models\About;
 use App\Models\Project;
 use App\Models\Skill;
@@ -18,16 +19,36 @@ use App\Models\Skill;
 */
 
 Route::get('/', function () {
-    $about = About::first();
-    $featuredProjects = Project::where('featured', true)->latest()->take(3)->get();
-    $projects = Project::latest()->paginate(6);
-    $skills = Skill::all(); // Untuk grid 3 kolom tanpa grouping
-    return view('frontend.home', compact('about', 'featuredProjects', 'projects', 'skills'));
+    // Guard against missing tables during first deploy before migrations run.
+    $tablesReady = Schema::hasTable('abouts')
+        && Schema::hasTable('projects')
+        && Schema::hasTable('skills');
+
+    if (! $tablesReady) {
+        return response(view('frontend.setup'), 503)
+            ->header('Retry-After', '30');
+    }
+
+    try {
+        $about = About::first();
+        $featuredProjects = Project::where('featured', true)->latest()->take(3)->get();
+        $projects = Project::latest()->paginate(6);
+        $skills = Skill::all();
+        return view('frontend.home', compact('about', 'featuredProjects', 'projects', 'skills'));
+    } catch (\Exception $e) {
+        return response(view('frontend.setup'), 503)
+            ->header('Retry-After', '30');
+    }
 })->name('home');
 
 Route::get('/project/{project:slug}', function (Project $project) {
-    $about = About::first();
-    return view('frontend.project-detail', compact('project', 'about'));
+    try {
+        $about = Schema::hasTable('abouts') ? About::first() : null;
+        return view('frontend.project-detail', compact('project', 'about'));
+    } catch (\Exception $e) {
+        return response(view('frontend.setup'), 503)
+            ->header('Retry-After', '30');
+    }
 })->name('project.show');
 
 Route::post('/contact', [FrontendContactController::class, 'store'])->name('contact.store');
